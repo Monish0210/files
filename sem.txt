@@ -1,0 +1,616 @@
+
+semantic.l
+
+
+%{
+#include "semantic.tab.h"
+#include <stdlib.h>
+#include <string.h>
+
+#define T_INT 1
+#define T_FLOAT 2
+#define T_DOUBLE 3
+#define T_CHAR 4
+#define T_BOOL 5
+#define T_STRING 6
+#define T_ERROR 99
+%}
+
+%option noyywrap
+
+ID      [a-zA-Z_$][a-zA-Z0-9_$]*
+NUM     [0-9]+(.[0-9]+)?([eE][+-]?[0-9]+)?
+STR     "([^"\
+]|\.)*"
+CHR     '([^'\
+]|\.)*'
+
+%%
+
+[ 	
+]+                         ;
+"//".*                             ;
+"/*"([^*]|*+[^*/])**+"/"         ;
+^[ 	]*#[^
+]*                     ;
+
+"int"                              { return INT; }
+"float"                            { return FLOAT; }
+"double"                           { return DOUBLE; }
+"char"                             { return CHAR; }
+"boolean"|"bool"                   { return BOOL; }
+"String"                           { return STRING; }
+
+"if"                               { return IF; }
+"else"                             { return ELSE; }
+"while"                            { return WHILE; }
+"for"                              { return FOR; }
+"return"                           { return RETURN; }
+
+"true"|"false"                     {
+                                       yylval.type = T_BOOL;
+                                       return BOOL_LITERAL;
+                                    }
+
+"=="                               { return EQ; }
+"!="                               { return NE; }
+"<="                               { return LE; }
+">="                               { return GE; }
+"&&"                               { return AND; }
+"||"                               { return OR; }
+"++"|"--"                          { return INCDEC; }
+
+{NUM}                              {
+                                       yylval.type =
+                                           (strchr(yytext, '.') ||
+                                            strchr(yytext, 'e') ||
+                                            strchr(yytext, 'E'))
+                                           ? T_DOUBLE : T_INT;
+                                       return NUMBER;
+                                    }
+
+{STR}                              {
+                                       yylval.type = T_STRING;
+                                       return STRING_LITERAL;
+                                    }
+
+{CHR}                              {
+                                       yylval.type = T_CHAR;
+                                       return CHAR_LITERAL;
+                                    }
+
+{ID}                               {
+                                       yylval.str = strdup(yytext);
+                                       return ID;
+                                    }
+
+[+-*/%=<>!]                       { return yytext[0]; }
+[(){};,]                           { return yytext[0]; }
+
+.                                  { return INVALID; }
+
+%%
+
+
+semantic.y
+
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_SYMBOLS 500
+#define MAX_SCOPE 100
+
+#define T_INT 1
+#define T_FLOAT 2
+#define T_DOUBLE 3
+#define T_CHAR 4
+#define T_BOOL 5
+#define T_STRING 6
+#define T_ERROR 99
+
+typedef struct {
+    char name[100];
+    int type;
+    int scope;
+} Symbol;
+
+Symbol table[MAX_SYMBOLS];
+int symbolCount = 0;
+int currentScope = 0;
+int semanticErrors = 0;
+int currentDeclarationType = T_ERROR;
+
+int yylex(void);
+void yyerror(const char *s);
+
+const char *typeName(int type);
+int lookup(const char *name);
+int declareVariable(const char *name, int type);
+int isNumeric(int type);
+int arithmeticType(int left, int right);
+int checkAssignment(int target, int source);
+void enterScope(void);
+void leaveScope(void);
+%}
+
+%union {
+    char *str;
+    int type;
+}
+
+%token <str> ID
+%token <type> NUMBER STRING_LITERAL CHAR_LITERAL BOOL_LITERAL
+%token INT FLOAT DOUBLE CHAR BOOL STRING
+%token IF ELSE WHILE FOR RETURN INVALID
+%token EQ NE LE GE AND OR INCDEC
+
+%type <type> data_type expression primary optional_expression
+%type <type> declarator
+
+%nonassoc LOWER_THAN_ELSE
+%nonassoc ELSE
+%right '='
+%left OR
+%left AND
+%left EQ NE
+%left '<' '>' LE GE
+%left '+' '-'
+%left '*' '/' '%'
+%right '!' UMINUS
+
+%%
+
+program:
+      /* empty */
+    | program statement
+    ;
+
+statement:
+      declaration ';'
+    | expression ';'
+    | ';'
+    | block
+    | IF '(' expression ')' statement %prec LOWER_THAN_ELSE
+    | IF '(' expression ')' statement ELSE statement
+    | WHILE '(' expression ')' statement
+    | FOR '(' optional_expression ';'
+          optional_expression ';' optional_expression ')' statement
+    | RETURN optional_expression ';'
+    ;
+
+declaration:
+      data_type
+      {
+          currentDeclarationType = $1;
+      }
+      declarators
+    ;
+
+declarators:
+      declarator
+    | declarators ',' declarator
+    ;
+
+declarator:
+      ID
+      {
+          declareVariable($1, currentDeclarationType);
+          free($1);
+          $$ = currentDeclarationType;
+      }
+    | ID '=' expression
+      {
+          if (declareVariable($1, currentDeclarationType))
+              checkAssignment(currentDeclarationType, $3);
+
+          free($1);
+          $$ = currentDeclarationType;
+      }
+    ;
+
+block:
+      '{'
+      {
+          enterScope();
+      }
+      statements '}'
+      {
+          leaveScope();
+      }
+    ;
+
+statements:
+      /* empty */
+    | statements statement
+    ;
+
+optional_expression:
+      /* empty */
+      {
+          $$ = T_ERROR;
+      }
+    | expression
+      {
+          $$ = $1;
+      }
+    ;
+
+data_type:
+      INT    { $$ = T_INT; }
+    | FLOAT  { $$ = T_FLOAT; }
+    | DOUBLE { $$ = T_DOUBLE; }
+    | CHAR   { $$ = T_CHAR; }
+    | BOOL   { $$ = T_BOOL; }
+    | STRING { $$ = T_STRING; }
+    ;
+
+expression:
+      primary
+      {
+          $$ = $1;
+      }
+    | ID '=' expression
+      {
+          int target = lookup($1);
+
+          if (target == T_ERROR) {
+              fprintf(stderr,
+                      "Semantic Error: '%s' is undeclared.
+", $1);
+              semanticErrors++;
+              $$ = T_ERROR;
+          } else {
+              checkAssignment(target, $3);
+              $$ = target;
+          }
+
+          free($1);
+      }
+    | expression '+' expression
+      {
+          $$ = arithmeticType($1, $3);
+      }
+    | expression '-' expression
+      {
+          $$ = arithmeticType($1, $3);
+      }
+    | expression '*' expression
+      {
+          $$ = arithmeticType($1, $3);
+      }
+    | expression '/' expression
+      {
+          $$ = arithmeticType($1, $3);
+      }
+    | expression '%' expression
+      {
+          if ($1 == T_ERROR || $3 == T_ERROR)
+              $$ = T_ERROR;
+          else if ($1 != T_INT || $3 != T_INT) {
+              fprintf(stderr,
+                      "Semantic Error: modulus requires integer operands.
+");
+              semanticErrors++;
+              $$ = T_ERROR;
+          } else {
+              $$ = T_INT;
+          }
+      }
+    | expression '<' expression
+      {
+          $$ = T_BOOL;
+      }
+    | expression '>' expression
+      {
+          $$ = T_BOOL;
+      }
+    | expression LE expression
+      {
+          $$ = T_BOOL;
+      }
+    | expression GE expression
+      {
+          $$ = T_BOOL;
+      }
+    | expression EQ expression
+      {
+          $$ = T_BOOL;
+      }
+    | expression NE expression
+      {
+          $$ = T_BOOL;
+      }
+    | expression AND expression
+      {
+          $$ = T_BOOL;
+      }
+    | expression OR expression
+      {
+          $$ = T_BOOL;
+      }
+    | '!' expression
+      {
+          $$ = T_BOOL;
+      }
+    | '-' expression %prec UMINUS
+      {
+          $$ = $2;
+      }
+    | INCDEC ID
+      {
+          $$ = lookup($2);
+
+          if ($$ == T_ERROR) {
+              fprintf(stderr,
+                      "Semantic Error: '%s' is undeclared.
+", $2);
+              semanticErrors++;
+          } else if (!isNumeric($$)) {
+              fprintf(stderr,
+                      "Semantic Error: increment requires a numeric variable.
+");
+              semanticErrors++;
+              $$ = T_ERROR;
+          }
+
+          free($2);
+      }
+    | ID INCDEC
+      {
+          $$ = lookup($1);
+
+          if ($$ == T_ERROR) {
+              fprintf(stderr,
+                      "Semantic Error: '%s' is undeclared.
+", $1);
+              semanticErrors++;
+          } else if (!isNumeric($$)) {
+              fprintf(stderr,
+                      "Semantic Error: increment requires a numeric variable.
+");
+              semanticErrors++;
+              $$ = T_ERROR;
+          }
+
+          free($1);
+      }
+    | '(' expression ')'
+      {
+          $$ = $2;
+      }
+    ;
+
+primary:
+      NUMBER
+      {
+          $$ = $1;
+      }
+    | STRING_LITERAL
+      {
+          $$ = $1;
+      }
+    | CHAR_LITERAL
+      {
+          $$ = $1;
+      }
+    | BOOL_LITERAL
+      {
+          $$ = $1;
+      }
+    | ID
+      {
+          $$ = lookup($1);
+
+          if ($$ == T_ERROR) {
+              fprintf(stderr,
+                      "Semantic Error: '%s' is undeclared.
+", $1);
+              semanticErrors++;
+          }
+
+          free($1);
+      }
+    ;
+
+%%
+
+const char *typeName(int type)
+{
+    switch (type) {
+        case T_INT: return "int";
+        case T_FLOAT: return "float";
+        case T_DOUBLE: return "double";
+        case T_CHAR: return "char";
+        case T_BOOL: return "boolean";
+        case T_STRING: return "String";
+        default: return "unknown";
+    }
+}
+
+int lookup(const char *name)
+{
+    for (int i = symbolCount - 1; i >= 0; --i) {
+        if (strcmp(table[i].name, name) == 0)
+            return table[i].type;
+    }
+
+    return T_ERROR;
+}
+
+int declareVariable(const char *name, int type)
+{
+    for (int i = symbolCount - 1; i >= 0; --i) {
+        if (table[i].scope < currentScope)
+            break;
+
+        if (table[i].scope == currentScope &&
+            strcmp(table[i].name, name) == 0) {
+            fprintf(stderr,
+                    "Semantic Error: '%s' already declared in this scope.
+",
+                    name);
+            semanticErrors++;
+            return 0;
+        }
+    }
+
+    if (symbolCount >= MAX_SYMBOLS) {
+        fprintf(stderr, "Semantic Error: symbol table is full.
+");
+        semanticErrors++;
+        return 0;
+    }
+
+    snprintf(table[symbolCount].name,
+             sizeof(table[symbolCount].name), "%s", name);
+    table[symbolCount].type = type;
+    table[symbolCount].scope = currentScope;
+    symbolCount++;
+
+    printf("Declared: %s as %s
+", name, typeName(type));
+    return 1;
+}
+
+int isNumeric(int type)
+{
+    return type == T_INT || type == T_FLOAT || type == T_DOUBLE;
+}
+
+int arithmeticType(int left, int right)
+{
+    if (left == T_ERROR || right == T_ERROR)
+        return T_ERROR;
+
+    if (!isNumeric(left) || !isNumeric(right)) {
+        fprintf(stderr,
+                "Semantic Error: arithmetic requires numeric operands.
+");
+        semanticErrors++;
+        return T_ERROR;
+    }
+
+    if (left == T_DOUBLE || right == T_DOUBLE)
+        return T_DOUBLE;
+
+    if (left == T_FLOAT || right == T_FLOAT)
+        return T_FLOAT;
+
+    return T_INT;
+}
+
+int checkAssignment(int target, int source)
+{
+    if (target == T_ERROR || source == T_ERROR)
+        return 0;
+
+    if (target == source) {
+        printf("Valid assignment.
+");
+        return 1;
+    }
+
+    if ((target == T_FLOAT &&
+         (source == T_INT || source == T_FLOAT)) ||
+        (target == T_DOUBLE && isNumeric(source))) {
+        printf("Valid assignment with numeric conversion.
+");
+        return 1;
+    }
+
+    fprintf(stderr, "Semantic Error: cannot assign %s to %s.
+",
+            typeName(source), typeName(target));
+    semanticErrors++;
+    return 0;
+}
+
+void enterScope(void)
+{
+    if (currentScope < MAX_SCOPE - 1) {
+        currentScope++;
+    } else {
+        fprintf(stderr, "Semantic Error: scope nesting too deep.
+");
+        semanticErrors++;
+    }
+}
+
+void leaveScope(void)
+{
+    int write = 0;
+
+    for (int read = 0; read < symbolCount; read++) {
+        if (table[read].scope != currentScope) {
+            if (write != read)
+                table[write] = table[read];
+            write++;
+        }
+    }
+
+    symbolCount = write;
+
+    if (currentScope > 0)
+        currentScope--;
+}
+
+void yyerror(const char *s)
+{
+    fprintf(stderr, "Syntax Error: %s
+", s);
+}
+
+int main(void)
+{
+    printf("Semantic Analyzer
+");
+    printf("Enter declarations, assignments, and statements.
+");
+    printf("Finish with Ctrl+D (Linux/macOS) or Ctrl+Z (Windows).
+
+");
+
+    int result = yyparse();
+
+    printf("
+Symbol Table (variables still in scope):
+");
+    printf("%-20s %-12s %-8s
+", "Name", "Type", "Scope");
+
+    for (int i = 0; i < symbolCount; ++i) {
+        printf("%-20s %-12s %-8d
+",
+               table[i].name,
+               typeName(table[i].type),
+               table[i].scope);
+    }
+
+    if (result != 0)
+        printf("
+Parsing failed.
+");
+    else if (semanticErrors > 0)
+        printf("
+Semantic analysis found %d error(s).
+", semanticErrors);
+    else
+        printf("
+No reported semantic errors.
+");
+
+    return result != 0 || semanticErrors != 0;
+}
+
+bison -d -o semantic.tab.c semantic.y
+flex -o semantic.lex.c semantic.l
+gcc semantic.tab.c semantic.lex.c -o semantic_analyzer
+./semantic_analyzer
+
+int a = 10;
+float b;
+b = a + 2;
+c = 20;

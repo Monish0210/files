@@ -1,0 +1,136 @@
+%{
+#include <stdio.h>
+%}
+
+digit       [0-9]
+letter      [a-zA-Z_]
+id          {letter}({letter}|{digit})*
+number      {digit}+(.{digit}+)?([eE][+-]?{digit}+)?
+string      "([^"\
+]|\.)*"
+char_const  '([^'\
+]|\.)'
+
+%%
+
+/* Data Types - C/C++ and Java */
+"int"|"float"|"double"|"char"|"void"|"bool"|"long"|"short"|
+"boolean"|"byte"|"String"                                      { printf("Data Type : %s
+", yytext); }
+
+/* Control Keywords */
+"if"|"else"|"for"|"while"|"do"|"break"|"continue"|"return"|
+"switch"|"case"|"default"|"try"|"catch"|"finally"|"throw"|
+"throws"|"assert"|"yield"                                      { printf("Control Keyword : %s
+", yytext); }
+
+/* C/C++ Keywords */
+"class"|"struct"|"public"|"private"|"protected"|"virtual"|
+"new"|"delete"|"this"|"namespace"|"using"|"friend"|
+"operator"|"template"|"typename"|"typedef"|"enum"|"union"|
+"constexpr"|"inline"|"extern"|"register"|"volatile"|
+"sizeof"|"goto"|"auto"|"mutable"|"explicit"|"export"|
+"decltype"|"noexcept"|"nullptr"                                 { printf("C/C++ Keyword : %s
+", yytext); }
+
+/* Java Keywords */
+"abstract"|"extends"|"implements"|"interface"|"package"|
+"import"|"static"|"final"|"super"|"synchronized"|
+"transient"|"native"|"strictfp"|"instanceof"|"const"|
+"implements"|"volatile"|"module"|"open"|"opens"|"requires"|
+"exports"|"provides"|"uses"|"with"|"transitive"|"permits"|
+"sealed"|"non-sealed"|"record"|"var"|"throws"|
+"instanceof"|"synchronized"|"transient"|"native"             { printf("Java Keyword : %s
+", yytext); }
+
+/* Java Access and Other Common Keywords */
+"public"|"private"|"protected"|"static"|"final"|
+"abstract"|"interface"|"extends"|"implements"|"package"|
+"import"|"super"|"synchronized"|"instanceof"                   { printf("Java Keyword : %s
+", yytext); }
+
+/* Boolean and Null Literals */
+"true"|"false"                                                  { printf("Boolean Literal : %s
+", yytext); }
+"null"|"nullptr"                                                { printf("Null Literal : %s
+", yytext); }
+
+/* Preprocessor Directives - C/C++ */
+^"#"[ 	]*"include".*                                           { printf("Preprocessor : %s
+", yytext); }
+^"#"[ 	]*"define".*                                            { printf("Macro Def : %s
+", yytext); }
+
+/* Comments - C, C++, Java */
+"//".*                                                          { printf("Comment : %s
+", yytext); }
+"/*"([^*]|*+[^*/])**+"/"                                      { printf("Comment : %s
+", yytext); }
+
+/* Identifiers and Literals */
+{id}                                                            { printf("Identifier : %s
+", yytext); }
+{number}                                                        { printf("Number : %s
+", yytext); }
+{string}                                                        { printf("String : %s
+", yytext); }
+{char_const}                                                    { printf("Character : %s
+", yytext); }
+
+/* Multi-character Operators - Keep before single-character ones */
+"++"|"--"|"->"|"::"|"=="|"!="|"<="|">="|"&&"|"||"|
+"+="|"-="|"*="|"/="|"%="|"&="|"|="|"^="|"<<"|">>"|
+">>>"|"<<"|">>"|"..."|"->"                                      { printf("Operator : %s
+", yytext); }
+
+/* Arithmetic Operators */
+"+"|"-"|"*"|"/"|"%"                                             { printf("Arithmetic Op : %s
+", yytext); }
+
+/* Assignment Operators */
+"="|"+="|"-="|"*="|"/="|"%="|"&="|"|="|"^="                   { printf("Assignment Op : %s
+", yytext); }
+
+/* Relational Operators */
+"=="|"!="|"<"|">"|"<="|">="|"instanceof"                        { printf("Relational Op : %s
+", yytext); }
+
+/* Logical Operators */
+"&&"|"||"|"!"                                                   { printf("Logical Op : %s
+", yytext); }
+
+/* Bitwise Operators */
+"&"|"|"|"^"|"~"|"<<"|">>"|">>>"                                { printf("Bitwise Op : %s
+", yytext); }
+
+/* Scope and Member Operators */
+"::"|"->"|"."                                                   { printf("Scope/Member Op : %s
+", yytext); }
+
+/* Separators and Punctuation */
+";"|","|"("|")"|"{"|"}"|"["|"]"|":"|"?"|"@"                    { printf("Separator : %s
+", yytext); }
+
+/* Ignore whitespace */
+[ 	
+
+]+                                                      ;
+
+/* Any unrecognized character */
+.                                                               { printf("Unknown : %s
+", yytext); }
+
+%%
+
+int yywrap() {
+    return 1;
+}
+
+int main() {
+    yylex();
+    return 0;
+}
+
+flex lexer.l
+gcc lex.yy.c -lfl
+./a.out < input.txt

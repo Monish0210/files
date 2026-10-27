@@ -1,0 +1,59 @@
+%{
+#include <stdio.h>
+%}
+
+digit      [0-9]
+letter     [a-zA-Z]
+
+%%
+
+"int"|"float"|"char"|"if"|"else"|"while"|"for"  { printf("Keyword : %s
+", yytext); }
+{letter}({letter}|{digit})*                     { printf("Identifier : %s
+", yytext); }
+{digit}+                                        {printf("Integer Constant : %s
+", yytext); }
+"+"|"-"|"*"|"/"|"%"                             { printf("Arithmetic Operator : %s
+", yytext); }
+"="|"=="|"!="|"<"|">"|"<="|">="                 { printf("Relational Operator : %s
+", yytext); }
+";"|","|"("|")"|"{"|"}"                         { printf("Separator : %s
+", yytext); }
+[ 	
+]                                         ;
+.                                               { printf("Unknown : %s
+", yytext); }
+
+%%
+
+int yywrap() {
+    return 1;
+}
+
+int main() {
+    yylex();
+    return 0;
+}
+
+flex lexer.l
+gcc lex.yy.c -lfl
+./a.out < input.txt
+
+
+int main() {
+    int a = 10;
+    float b = 20;
+    char c = 5;
+
+    if (a >= b) {
+        a = a + b;
+    } else {
+        a = a - 1;
+    }
+
+    while (a > 0) {
+        a = a - 1;
+    }
+
+    return a;
+}

@@ -1,0 +1,207 @@
+.l file
+
+%{
+#include "y.tab.h"
+#include <stdlib.h>
+#include <string.h>
+%}
+
+%%
+
+"int"                   { return INT; }
+"float"                 { return FLOAT; }
+"char"                  { return CHAR; }
+[0-9]+                  { yylval.num = atoi(yytext); return NUMBER; }
+[a-zA-Z_][a-zA-Z0-9_]*  { yylval.str = strdup(yytext); return ID; }
+[ 	
+]+                ;
+
+                      { return NEWLINE; }
+"="                     { return '='; }
+";"                     { return ';'; }
+.                       { return yytext[0]; }
+
+%%
+
+int yywrap()
+{
+    return 1;
+}
+
+
+
+.y file
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX 100
+
+struct Symbol
+{
+    char name[50];
+    char type[20];
+};
+
+struct Symbol symbolTable[MAX];
+int symbolCount = 0;
+
+int yylex();
+void yyerror(const char *s);
+
+void declareVariable(char *name, char *type);
+void checkVariable(char *name);
+%}
+
+%union
+{
+    char *str;
+    int num;
+}
+
+%token INT FLOAT CHAR
+%token <str> ID
+%token <num> NUMBER
+%token NEWLINE
+
+%%
+
+program:
+        lines
+        ;
+
+lines:
+        /* empty */
+        | lines line
+        ;
+
+line:
+        NEWLINE
+        | declaration NEWLINE
+        | assignment NEWLINE
+        ;
+
+declaration:
+        INT ID ';'
+        {
+            declareVariable($2, "int");
+            free($2);
+        }
+        |
+        FLOAT ID ';'
+        {
+            declareVariable($2, "float");
+            free($2);
+        }
+        |
+        CHAR ID ';'
+        {
+            declareVariable($2, "char");
+            free($2);
+        }
+        ;
+
+assignment:
+        ID '=' NUMBER ';'
+        {
+            checkVariable($1);
+            free($1);
+        }
+        ;
+
+%%
+
+void declareVariable(char *name, char *type)
+{
+    int i;
+
+    /* Check for redeclaration */
+    for(i = 0; i < symbolCount; i++)
+    {
+        if(strcmp(symbolTable[i].name, name) == 0)
+        {
+            printf("Semantic Error: Variable '%s' redeclared.
+", name);
+            return;
+        }
+    }
+
+    /* Add variable to symbol table */
+    if(symbolCount < MAX)
+    {
+        strcpy(symbolTable[symbolCount].name, name);
+        strcpy(symbolTable[symbolCount].type, type);
+
+        printf("Declared: %s as %s
+", name, type);
+
+        symbolCount++;
+    }
+}
+
+void checkVariable(char *name)
+{
+    int i;
+
+    /* Search symbol table */
+    for(i = 0; i < symbolCount; i++)
+    {
+        if(strcmp(symbolTable[i].name, name) == 0)
+        {
+            printf("Valid assignment to variable '%s'
+", name);
+            return;
+        }
+    }
+
+    printf("Semantic Error: Variable '%s' is undeclared.
+", name);
+}
+
+void yyerror(const char *s)
+{
+    printf("Syntax Error: %s
+", s);
+}
+
+int main()
+{
+    printf("Enter declarations and assignments:
+
+");
+
+    yyparse();
+
+    printf("
+Symbol Table:
+");
+    printf("----------------------
+");
+    printf("Name	Type
+");
+    printf("----------------------
+");
+
+    for(int i = 0; i < symbolCount; i++)
+    {
+        printf("%s	%s
+",
+               symbolTable[i].name,
+               symbolTable[i].type);
+    }
+
+    return 0;
+}
+
+
+yacc -d symbol.y
+flex symbol.l
+gcc y.tab.c lex.yy.c -o a.out -ll
+./a.out < input.txt > output.txt
+
+int a;
+float b;
+a = 10;
+c = 20;

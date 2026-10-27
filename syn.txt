@@ -1,0 +1,312 @@
+lexer.l
+
+
+%{
+#include "y.tab.h"
+#include <stdio.h>
+%}
+
+%option noyywrap
+
+ID      [a-zA-Z_][a-zA-Z0-9_]*
+NUM     [0-9]+(.[0-9]+)?
+STR     "([^"\
+]|\.)*"
+CHAR    '([^'\
+]|\.)*'
+
+%%
+
+^[ 	]*#[^
+]*             ;
+[ 	
+]+                 ;
+"//".*                     ;
+"/*"([^*]|*+[^*/])**+"/" ;
+
+"int"|"float"|"double"|"char"|"void"|
+"long"|"short"|"boolean"|"bool"|"String" {
+                                return TYPE;
+                            }
+
+"if"                       { return IF; }
+"else"                     { return ELSE; }
+"while"                    { return WHILE; }
+"for"                      { return FOR; }
+"return"                   { return RETURN; }
+"class"                    { return CLASS; }
+"public"|"private"|"protected"|
+"static"|"final"|"abstract" {
+                                return MODIFIER;
+                            }
+
+"System.out.println"|"System.out.print" {
+                                return PRINT;
+                            }
+
+"=="                       { return EQ; }
+"!="                       { return NE; }
+"<="                       { return LE; }
+">="                       { return GE; }
+"&&"                       { return AND; }
+"||"                       { return OR; }
+"++"                       { return INC; }
+"--"                       { return DEC; }
+"+="                       { return ADD_ASSIGN; }
+"-="                       { return SUB_ASSIGN; }
+
+{ID}                       { return ID; }
+{NUM}                      { return NUMBER; }
+{STR}                      { return STRING_LITERAL; }
+{CHAR}                     { return CHAR_LITERAL; }
+
+[+-*/%=<>!]               { return yytext[0]; }
+[(){};,.[]]              { return yytext[0]; }
+
+.                          {
+                                fprintf(stderr,
+                                    "Unknown character: %s
+", yytext);
+                                return INVALID;
+                            }
+
+%%
+
+
+parser.y
+
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+int yylex(void);
+void yyerror(const char *s);
+%}
+
+%token ID NUMBER STRING_LITERAL CHAR_LITERAL
+%token TYPE IF ELSE WHILE FOR RETURN
+%token CLASS MODIFIER PRINT INVALID
+%token EQ NE LE GE AND OR INC DEC ADD_ASSIGN SUB_ASSIGN
+
+%nonassoc LOWER_THAN_ELSE
+%nonassoc ELSE
+
+%left OR
+%left AND
+%left EQ NE
+%left '<' '>' LE GE
+%left '+' '-'
+%left '*' '/' '%'
+%right '!'
+%right UMINUS
+
+%%
+
+program:
+      items
+      ;
+
+items:
+      /* empty */
+    | items item
+    ;
+
+item:
+      function
+    | class_definition
+    | declaration
+    | statement
+    ;
+
+class_definition:
+      modifiers CLASS ID '{' class_items '}'
+    ;
+
+class_items:
+      /* empty */
+    | class_items class_item
+    ;
+
+class_item:
+      function
+    | declaration
+    | statement
+    ;
+
+modifiers:
+      /* empty */
+    | modifiers MODIFIER
+    ;
+
+function:
+      modifiers TYPE ID '(' parameters ')' block
+    ;
+
+parameters:
+      /* empty */
+    | parameter_list
+    ;
+
+parameter_list:
+      parameter
+    | parameter_list ',' parameter
+    ;
+
+parameter:
+      TYPE ID
+    | TYPE ID '[' ']'
+    ;
+
+declaration:
+      TYPE declarators ';'
+    ;
+
+declarators:
+      declarator
+    | declarators ',' declarator
+    ;
+
+declarator:
+      ID
+    | ID '=' expression
+    | ID '[' NUMBER ']'
+    ;
+
+block:
+      '{' statements '}'
+    ;
+
+statements:
+      /* empty */
+    | statements statement
+    ;
+
+statement:
+      block
+    | declaration
+    | expression ';'
+    | ';'
+    | RETURN ';'
+    | RETURN expression ';'
+    | IF '(' expression ')' statement %prec LOWER_THAN_ELSE
+    | IF '(' expression ')' statement ELSE statement
+    | WHILE '(' expression ')' statement
+    | FOR '(' for_init ';' optional_expression ';'
+          optional_expression ')' statement
+    ;
+
+for_init:
+      /* empty */
+    | declaration_without_semicolon
+    | expression
+    ;
+
+declaration_without_semicolon:
+      TYPE declarators
+    ;
+
+optional_expression:
+      /* empty */
+    | expression
+    ;
+
+expression:
+      ID
+    | NUMBER
+    | STRING_LITERAL
+    | CHAR_LITERAL
+    | '(' expression ')'
+    | ID '=' expression
+    | ID ADD_ASSIGN expression
+    | ID SUB_ASSIGN expression
+    | expression '+' expression
+    | expression '-' expression
+    | expression '*' expression
+    | expression '/' expression
+    | expression '%' expression
+    | expression '<' expression
+    | expression '>' expression
+    | expression LE expression
+    | expression GE expression
+    | expression EQ expression
+    | expression NE expression
+    | expression AND expression
+    | expression OR expression
+    | '!' expression
+    | '-' expression %prec UMINUS
+    | INC ID
+    | DEC ID
+    | ID INC
+    | ID DEC
+    | ID '(' arguments ')'
+    | PRINT '(' arguments ')'
+    | ID '[' expression ']'
+    ;
+
+arguments:
+      /* empty */
+    | argument_list
+    ;
+
+argument_list:
+      expression
+    | argument_list ',' expression
+    ;
+
+%%
+
+void yyerror(const char *s)
+{
+    fprintf(stderr, "Syntax Error: %s
+", s);
+}
+
+int main(void)
+{
+    printf("Enter C/C++/Java subset code (Ctrl+D to finish):
+
+");
+
+    if (yyparse() == 0)
+        printf("
+Syntax analysis successful: input matches the grammar.
+");
+    else
+        printf("
+Syntax analysis failed: invalid syntax.
+");
+
+    return 0;
+}
+
+
+
+bison -d -y parser.y
+flex lexer.l
+gcc y.tab.c lex.yy.c -o syntax_checker
+./syntax_checker
+
+
+int main() {
+    int a = 10;
+    int b = 20;
+    int sum = a + b;
+    printf("%d", sum);
+    return 0;
+}
+
+
+public class Main {
+    public static void main(String[] args) {
+        int a = 10;
+        int b = 20;
+        System.out.println(a + b);
+    }
+}
+
+
+int main() {
+    int = 10;
+    return 0;
+}
