@@ -1,36 +1,53 @@
+int main() {
+    int value = 12;
 
-1.  Program       → Class
+    if (value > 10) {
+        value = value - 2;
+    } else {
+        value = value + 2;
+    }
 
-2.  Class         → class id { MainMethod }
+    do {
+        value = value - 1;
+    } while (value > 0);
 
-3.  MainMethod    → public static void main
-                    ( String [ ] id ) Block
+    return 0;
+}
 
-4.  Block         → { Statements }
 
-5.  Statements    → Statement Statements | ε
 
-6.  Statement     → Declaration ;
+
+
+1.  Program       → Function
+
+2.  Function      → int main ( ) Block
+
+3.  Block         → { Statements }
+
+4.  Statements    → Statement Statements | ε
+
+5.  Statement     → Declaration ;
                   | Assignment ;
                   | IfElse
                   | DoWhile
+                  | return number ;
 
-7.  Declaration   → int id
+6.  Declaration   → int id
                   | int id = Expression
 
-8.  Assignment    → id = Expression
+7.  Assignment    → id = Expression
 
-9.  IfElse        → if ( Condition ) Block else Block
+8.  IfElse        → if ( Condition ) Block else Block
 
-10. DoWhile       → do Block while ( Condition ) ;
+9.  DoWhile       → do Block while ( Condition ) ;
 
-11. Condition     → Expression > Expression
+10. Condition     → Expression > Expression
                   | Expression < Expression
 
-12. Expression    → Expression + Term
+11. Expression    → Expression + Term
                   | Expression - Term
                   | Term
 
-13. Term          → id
+12. Term          → id
                   | number
                   | ( Expression )
