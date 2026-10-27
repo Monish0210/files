@@ -12,3 +12,8 @@ class Counter {
         } while (value > 0);
     }
 }
+
+
+
+
+value = total + 2;
